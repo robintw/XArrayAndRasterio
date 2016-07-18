@@ -4,7 +4,22 @@ import numpy as np
 
 
 def rasterio_to_xarray(fname):
-    """Converts the given file to an xarray.DataArray object"""
+    """Converts the given file to an xarray.DataArray object.
+
+    Arguments:
+     - `fname`: the filename of the rasterio-compatible file to read
+
+    Returns:
+        An xarray.DataArray object containing the data from the given file,
+        along with the relevant geographic metadata.
+
+    Notes:
+    This produces an xarray.DataArray object with two dimensions: x and y.
+    The co-ordinates for these dimensions are set based on the geographic
+    reference defined in the original file.
+
+    This has only been tested with GeoTIFF files: use other types of files
+    at your own risk!"""
     with rasterio.drivers():
         with rasterio.open(fname) as src:
             data = src.read(1)
@@ -31,3 +46,36 @@ def rasterio_to_xarray(fname):
                     pass
 
     return xr.DataArray(data, dims=dims, coords=coords, attrs=attrs)
+
+
+def xarray_to_rasterio(xa, output_filename):
+    """Converts the given xarray.DataArray object to a raster output file
+    using rasterio.
+
+    Arguments:
+     - `xa`: The xarray.DataArray to convert
+     - `output_filename`: the filename to store the output GeoTIFF file in
+
+    Notes:
+    Converts the given xarray.DataArray to a GeoTIFF output file using rasterio.
+    This function only supports 2D or 3D DataArrays, and GeoTIFF output.
+    The input DataArray must have attributes (stored as xa.attrs) specifying
+    geographic metadata, or the output will have _no_ geographic information.
+    """
+    if len(xa.shape) == 2:
+        count = 1
+        height = xa.shape[0]
+        width = xa.shape[1]
+        band_indicies = 1
+    else:
+        count = xa.shape[0]
+        height = xa.shape[1]
+        width = xa.shape[2]
+        band_indicies = np.arange(count) + 1
+
+    with rasterio.open(output_filename, 'w',
+                       driver='GTiff',
+                       height=height, width=width,
+                       dtype=str(xa.dtype), count=count,
+                       **xa.attrs) as dst:
+        dst.write(xa.values, band_indicies)
