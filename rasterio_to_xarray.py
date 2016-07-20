@@ -39,11 +39,18 @@ def rasterio_to_xarray(fname):
             dims = ('y', 'x')
 
             attrs = {}
-            for attr_name in ['crs', 'affine', 'proj']:
-                try:
-                    attrs[attr_name] = getattr(src, attr_name)
-                except AttributeError:
-                    pass
+
+            try:
+                aff = src.affine
+                attrs['affine'] = aff.to_gdal()
+            except AttributeError:
+                pass
+
+            try:
+                c = src.crs
+                attrs['crs'] = c.to_string()
+            except AttributeError:
+                pass
 
     return xr.DataArray(data, dims=dims, coords=coords, attrs=attrs)
 
@@ -58,10 +65,19 @@ def xarray_to_rasterio(xa, output_filename):
 
     Notes:
     Converts the given xarray.DataArray to a GeoTIFF output file using rasterio.
+
     This function only supports 2D or 3D DataArrays, and GeoTIFF output.
+
     The input DataArray must have attributes (stored as xa.attrs) specifying
     geographic metadata, or the output will have _no_ geographic information.
+
+    If the DataArray uses dask as the storage backend then this function will
+    force a load of the raw data.
     """
+    # Forcibly compute the data, to ensure that all of the metadata is
+    # the same as the actual data (ie. dtypes are the same etc)
+    xa = xa.load()
+
     if len(xa.shape) == 2:
         count = 1
         height = xa.shape[0]
@@ -73,9 +89,23 @@ def xarray_to_rasterio(xa, output_filename):
         width = xa.shape[2]
         band_indicies = np.arange(count) + 1
 
+    processed_attrs = {}
+
+    try:
+        val = xa.attrs['affine']
+        processed_attrs['affine'] = rasterio.Affine.from_gdal(*val)
+    except AttributeError:
+        pass
+
+    try:
+        val = xa.attrs['crs']
+        processed_attrs['crs'] = rasterio.crs.CRS.from_string(val)
+    except AttributeError:
+        pass
+
     with rasterio.open(output_filename, 'w',
                        driver='GTiff',
                        height=height, width=width,
                        dtype=str(xa.dtype), count=count,
-                       **xa.attrs) as dst:
+                       **processed_attrs) as dst:
         dst.write(xa.values, band_indicies)
