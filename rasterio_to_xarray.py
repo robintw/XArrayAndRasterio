@@ -1,7 +1,8 @@
 import rasterio
 import xarray as xr
 import numpy as np
-
+import pandas as pd
+import os
 
 def rasterio_to_xarray(fname):
     """Converts the given file to an xarray.DataArray object.
@@ -109,3 +110,19 @@ def xarray_to_rasterio(xa, output_filename):
                        dtype=str(xa.dtype), count=count,
                        **processed_attrs) as dst:
         dst.write(xa.values, band_indicies)
+
+
+def xarray_to_rasterio_by_band(xa, output_basename, dim='time', date_format='%Y-%m-%d'):
+    for i in range(len(xa[dim])):
+        args = {dim: i}
+        data = xa.isel(**args)
+        index_value = data[dim].values
+
+        if type(index_value) is np.datetime64:
+            formatted_index = pd.to_datetime(index_value).strftime(date_format)
+        else:
+            formatted_index = str(index_value)
+
+        filename = output_basename + formatted_index + '.tif'
+        xarray_to_rasterio(data, filename)
+        print('Exported %s' % formatted_index)
