@@ -95,13 +95,13 @@ def xarray_to_rasterio(xa, output_filename):
     try:
         val = xa.attrs['affine']
         processed_attrs['affine'] = rasterio.Affine.from_gdal(*val)
-    except AttributeError:
+    except KeyError:
         pass
 
     try:
         val = xa.attrs['crs']
         processed_attrs['crs'] = rasterio.crs.CRS.from_string(val)
-    except AttributeError:
+    except KeyError:
         pass
 
     with rasterio.open(output_filename, 'w',
